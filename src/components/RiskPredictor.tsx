@@ -147,7 +147,7 @@ export default function RiskPredictor({ insights, score, activeDrifts }: RiskPre
         </div>
 
         {/* Board Executive Narrative compiler Right Column */}
-        <div className="lg:col-span-4 bg-zinc-950 border border-zinc-800 rounded-2xl p-5 flex flex-col justify-between min-h-[280px]">
+        <div className="lg:col-span-4 bg-zinc-950 border border-zinc-805 rounded-2xl p-5 flex flex-col justify-between min-h-[280px]">
           <div>
             <div className="flex items-center justify-between border-b border-zinc-900 pb-2 mb-3">
               <span className="text-xs font-mono font-bold text-zinc-400 uppercase flex items-center gap-1.5">

@@ -1,4 +1,4 @@
-import React, { useState, FormEvent, useRef, useEffect } from "react";
+import { useState, FormEvent } from "react";
 import { RegulationObject } from "../types";
 import { 
   PlusCircle, 
@@ -14,11 +14,7 @@ import {
   History,
   Terminal,
   Clock,
-  ExternalLink,
-  Upload,
-  X,
-  Radio,
-  Zap
+  ExternalLink
 } from "lucide-react";
 
 interface LiveFeedProps {
@@ -27,27 +23,6 @@ interface LiveFeedProps {
   selectedReg: RegulationObject | null;
   onSelectReg: (reg: RegulationObject) => void;
 }
-
-const PRECOOKED_CIRCULARS = [
-  {
-    title: "RBI Command - Digital Payment Core Security Directives",
-    authority: "RBI",
-    text: "Banks must immediately coordinate localized data storage with physical boundary filters, enforcing adaptive permission groups inside the root user IAM environment.",
-    ingestMethod: "text"
-  },
-  {
-    title: "RBI Notification on Crypto and Token Session Limits",
-    authority: "RBI",
-    text: "This directive addresses decentralized currency risks in settlement layers. Financial entities must deploy double-ended cryptographic session timeouts and strictly lock outbound ledger operations behind human compliance overrides.",
-    ingestMethod: "text"
-  },
-  {
-    title: "RBI Cyber Resilience Framework - IAM Isolation Control",
-    authority: "RBI",
-    text: "Recent intrusion vectors have compromised key vault privileges. All certified banks are ordered to configure zero-trust network boundaries on transaction endpoints, quarantining dynamic active directories from general API routing paths.",
-    ingestMethod: "text"
-  }
-];
 
 export default function LiveFeed({ 
   regulations, 
@@ -65,245 +40,15 @@ export default function LiveFeed({
   const [authority, setAuthority] = useState("RBI");
   const [text, setText] = useState("");
 
-  // Autonomous Ingest Daemon State
-  const [isDaemonActive, setIsDaemonActive] = useState(false);
-  const [daemonTimer, setDaemonTimer] = useState(30);
-  const [daemonLogs, setDaemonLogs] = useState<string[]>([
-    "Listener offline. Toggle the live endpoint bound above to interface with live RBI circular publishes."
-  ]);
-  const [precookedIndex, setPrecookedIndex] = useState(0);
-
-  const triggerMockRbiPush = async () => {
-    setLoading(true);
-    const mockCir = PRECOOKED_CIRCULARS[precookedIndex % PRECOOKED_CIRCULARS.length];
-    setPrecookedIndex(prev => prev + 1);
-
-    const messages = [
-      `Intercepted new RBI live secure push: "${mockCir.title}"`,
-      "Decompressing official PDF booklet layout and headers...",
-      "Dispatching stream binary to Gemini AI for compliance mapping...",
-      "Structuring isolated system bounds & assessing enterprise blast radius...",
-      "Injecting dynamic compliance checkpoints...",
-      "Autonomous processing finalized successfully."
-    ];
-
-    let step = 0;
-    setLoaderMessage(messages[0]);
-    const loaderInterval = setInterval(() => {
-      step++;
-      if (step < messages.length) {
-        setLoaderMessage(messages[step]);
-      }
-    }, 1200);
-
-    try {
-      const resp = await fetch("/api/analyze-regulation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: mockCir.title,
-          authority: mockCir.authority,
-          text: mockCir.text,
-          ingestMethod: "text"
-        })
-      });
-
-      if (!resp.ok) throw new Error("Automated parsing failed");
-      const parsedData = await resp.json();
-      onAddRegulation(parsedData);
-      onSelectReg(parsedData);
-    } catch (err) {
-      console.warn("Autonomous API parse hit fallback:", err);
-      
-      // Local parsing fallback
-      const mockResult: RegulationObject = {
-        id: `reg-auto-${Date.now()}`,
-        title: mockCir.title,
-        date: new Date().toISOString().split("T")[0],
-        authority: mockCir.authority,
-        category: "Cybersecurity",
-        severity: "HIGH",
-        text: mockCir.text,
-        parsed: {
-          category: "Cybersecurity",
-          severity: "HIGH",
-          legalIntent: `Ensure banks comply safely with the autonomous RBI security directives and lock outbound ledger parameters.`,
-          extractedObligations: [
-            "Validate and isolate direct API boundaries on active portfolios.",
-            "Deploy strong multi-factor verification mechanisms within administrative domains.",
-            "Schedule continuous compliance checks tracking posture drift metrics."
-          ],
-          actionPoints: [
-            { department: "Compliance", actionRequired: "Incorporate the new RBI Digital Payment directive requirements", jiraTicket: "CMP-7711", owner: "Priya M.", timelineDays: 7, status: "IN_PROGRESS" },
-            { department: "Cybersecurity", actionRequired: "Perform zero-trust endpoint boundary scan on transaction channels", jiraTicket: "SEC-4412", owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" }
-          ],
-          twinImpact: [
-            { systemName: "IAM System", reason: "Zero-trust endpoints impact authorization layers", riskIncreasePercent: 15 },
-            { systemName: "Audit Logging Service", reason: "Ledger boundaries require verification reporting state", riskIncreasePercent: 12 }
-          ],
-          driftVulnerabilities: [
-            {
-              controlName: "IAM Authorization Filters",
-              driftPattern: "Out-of-band updates bypassing strict approval channels",
-              detectionSIEMQuery: "index=audit_logs target=IAM_Policy event_type=MODIFY | stats count by user"
-            }
-          ],
-          predictiveRiskIncrease: 15,
-          remediationDurationWeeks: 3
-        },
-        fallbackMode: true
-      };
-      onAddRegulation(mockResult);
-      onSelectReg(mockResult);
-    } finally {
-      clearInterval(loaderInterval);
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isDaemonActive) {
-      setDaemonLogs((prev) => [
-        `[${new Date().toLocaleTimeString()}] Autonomous RSS / Websocket Listener suspended.`,
-        ...prev.slice(0, 4)
-      ]);
-      return;
-    }
-
-    setDaemonLogs([
-      `[${new Date().toLocaleTimeString()}] Connecting secure telemetry line to Reserve Bank of India Notification stream...`,
-      `[${new Date().toLocaleTimeString()}] Secure Handshake completed inside sandbox TLS environment.`,
-      `[${new Date().toLocaleTimeString()}] Listener status: BOUND & RUNNING. Standard webhook set to /api/compliance/webhook-receiver`
-    ]);
-
-    let timerCount = 30;
-    setDaemonTimer(30);
-
-    const daemonInterval = setInterval(() => {
-      timerCount--;
-      setDaemonTimer(timerCount);
-
-      if (timerCount % 10 === 0 && timerCount > 0) {
-        setDaemonLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] [POLL DAEMON] Polling RBI portal... Status 200 (Active, no new releases).`,
-          ...prev.slice(0, 4)
-        ]);
-      }
-
-      if (timerCount <= 0) {
-        setDaemonLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] [LIVE PUSH DETECTED] RBI released fresh document binary! Intercepting payload...`,
-          ...prev.slice(0, 4)
-        ]);
-        triggerMockRbiPush();
-        timerCount = 30;
-        setDaemonTimer(30);
-      }
-    }, 1000);
-
-    return () => clearInterval(daemonInterval);
-  }, [isDaemonActive, precookedIndex]);
-
-  // Ingestion Mode (PDF vs TEXT)
-  const [ingestMethod, setIngestMethod] = useState<"pdf" | "text">("pdf");
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
-  const [pdfName, setPdfName] = useState("");
-  const [pdfSize, setPdfSize] = useState("");
-  const [dragActive, setDragActive] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const filteredRegs = regulations.filter(reg => 
     reg.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     reg.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
     reg.authority.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const processFile = (file: File) => {
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file);
-      setPdfName(file.name);
-      
-      const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
-      setPdfSize(`${sizeInMB} MB`);
-
-      // Auto-fill Title and Authority
-      const cleanName = file.name
-        .replace(/\.[^/.]+$/, "") // remove extension
-        .replace(/[_-]/g, " ")     // replace dashes/underscores with spaces
-        .replace(/\b\w/g, c => c.toUpperCase()); // titlecase
-      
-      setTitle(cleanName);
-
-      const nameLower = file.name.toLowerCase();
-      if (nameLower.includes("rbi")) {
-        setAuthority("RBI");
-      } else if (nameLower.includes("sebi")) {
-        setAuthority("SEBI");
-      } else if (nameLower.includes("dpdp")) {
-        setAuthority("DPDP Board");
-      } else if (nameLower.includes("cert")) {
-        setAuthority("CERT-In");
-      }
-
-      // Base64 conversion
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setPdfBase64(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    } else {
-      alert("Please upload a valid PDF document (.pdf)");
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
-    }
-  };
-
-  const removePdf = () => {
-    setPdfFile(null);
-    setPdfBase64(null);
-    setPdfName("");
-    setPdfSize("");
-  };
-
   const handleCreateRegulation = async (e: FormEvent) => {
     e.preventDefault();
-    
-    if (ingestMethod === "text" && !text.trim()) {
-      alert("Please enter regulatory text to analyze.");
-      return;
-    }
-    if (ingestMethod === "pdf" && !pdfBase64) {
-      alert("Please upload/drag a PDF document first.");
-      return;
-    }
+    if (!text.trim()) return;
 
     setLoading(true);
     setIsFormOpen(false);
@@ -312,9 +57,6 @@ export default function LiveFeed({
     const messages = [
       "Establishing sovereign connection stream...",
       "Scraping document structure and authority parameters...",
-      ingestMethod === "pdf"
-        ? `Reading secure PDF (${pdfName}) and prepping binary payload...`
-        : "Extracting regulatory clauses from input field...",
       "Using Gemini AI to interpret underlying legal intent...",
       "Mapping obligations directly onto banking department matrices...",
       "Simulating Digital Twin ripple impacts and drift telemetry...",
@@ -333,10 +75,7 @@ export default function LiveFeed({
         body: JSON.stringify({
           title: title || "New Regulatory Directive",
           authority: authority,
-          text: ingestMethod === "pdf" ? `Attached PDF Ingestion: ${pdfName}` : text,
-          pdfBase64: pdfBase64,
-          pdfName: pdfName,
-          ingestMethod: ingestMethod
+          text: text
         })
       });
 
@@ -352,7 +91,6 @@ export default function LiveFeed({
       setTitle("");
       setAuthority("RBI");
       setText("");
-      removePdf();
     } catch (e: any) {
       console.warn("Analysis request failed. Activating local automated simulation framework.", e);
     } finally {
@@ -370,7 +108,7 @@ export default function LiveFeed({
       case "MEDIUM":
         return "text-blue-400 bg-blue-950/30 border-blue-800/40";
       default:
-        return "text-zinc-400 bg-zinc-900 border-zinc-800";
+        return "text-zinc-400 bg-zinc-900 border-zinc-805";
     }
   };
 
@@ -407,111 +145,12 @@ export default function LiveFeed({
         </button>
       </div>
 
-      {/* Autonomous Daemon Workspace Widget */}
-      <div className="bg-[#0e0e14]/90 border border-zinc-800 rounded-2xl p-4 mb-6 flex flex-col gap-3.5" id="rbi-daemon-widget">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className={`p-1.5 rounded-lg border transition-all ${
-              isDaemonActive 
-                ? "bg-emerald-950/30 border-emerald-850 text-emerald-400 animate-pulse" 
-                : "bg-zinc-900/60 border-zinc-800 text-zinc-500"
-            }`}>
-              <Radio className="w-4 h-4" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-semibold text-zinc-200 truncate pr-1">Autonomous RBI Listener</span>
-              <span className="text-[9px] font-mono text-zinc-500">Telemetry Receiver Pipeline</span>
-            </div>
-            
-            <span className={`ml-auto px-1.5 py-0.5 rounded text-[8px] font-mono uppercase tracking-wider ${
-              isDaemonActive ? "bg-emerald-950/80 text-emerald-400 border border-emerald-900 animate-pulse" : "bg-zinc-900 text-zinc-500 border border-zinc-800"
-            }`}>
-              {isDaemonActive ? `Auto: ${daemonTimer}s` : "SUSPENDED"}
-            </span>
-          </div>
-
-          <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
-            Intercepts live PDF policies from official RBI systems, executing direct neural translation, system boundary mapping, JIRA task synthesis, and risk estimation.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={triggerMockRbiPush}
-            className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-[10px] font-mono font-bold text-blue-400 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer w-full"
-            title="Simulate secure RBI publication API event"
-          >
-            <Zap className="w-3 h-3 text-blue-405" />
-            Simulate Live RBI Release
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsDaemonActive(!isDaemonActive)}
-            className={`py-1.5 text-[10px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center w-full ${
-              isDaemonActive 
-                ? "bg-rose-950/30 hover:bg-rose-950/50 border border-rose-900/30 text-rose-400" 
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            {isDaemonActive ? "Deactivate Daemon" : "Activate Poll Daemon"}
-          </button>
-        </div>
-
-        {/* Live Mini Log Console */}
-        <div className="bg-zinc-950/90 border border-zinc-900/80 rounded-xl p-2.5 font-mono text-[9px] text-zinc-450 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-zinc-500 border-b border-zinc-900/40 pb-1">
-            <span className="flex items-center gap-1 uppercase tracking-wider text-[8px] font-bold">
-              <Terminal className="w-3.5 h-3.5 text-zinc-650" /> Webhook Output Stream
-            </span>
-            <span className="text-[8px] opacity-80 text-blue-500">WSS://api.rbi.org.in</span>
-          </div>
-          <div className="flex flex-col gap-1 max-h-[85px] overflow-y-auto pr-1">
-            {daemonLogs.map((log, i) => (
-              <div 
-                key={i} 
-                className={`${i === 0 ? "text-blue-400 font-medium" : "text-zinc-500"} break-all leading-normal`}
-                title={log}
-              >
-                {log}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Sandbox Slide form */}
       {isFormOpen && (
         <form onSubmit={handleCreateRegulation} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 mb-6 slide-in relative z-20" id="sandbox-form">
           <h4 className="text-sm font-mono font-bold text-blue-400 uppercase tracking-wide mb-4 flex items-center gap-2">
             <Sparkles className="w-4 h-4" /> Ingest Draft Bank Directive
           </h4>
-
-          {/* Tab Selection */}
-          <div className="flex gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-lg mb-4">
-            <button
-              type="button"
-              onClick={() => { setIngestMethod("pdf"); }}
-              className={`flex-1 py-1.5 text-xs font-mono rounded-md transition-all ${
-                ingestMethod === "pdf"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
-              }`}
-            >
-              PDF Document Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => { setIngestMethod("text"); }}
-              className={`flex-1 py-1.5 text-xs font-mono rounded-md transition-all ${
-                ingestMethod === "text"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
-              }`}
-            >
-              Paste Legal Text
-            </button>
-          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
             <div className="md:col-span-8 flex flex-col gap-1.5">
@@ -540,74 +179,17 @@ export default function LiveFeed({
             </div>
           </div>
 
-          {/* Dynamic Inputs based on Method */}
-          {ingestMethod === "pdf" ? (
-            <div className="flex flex-col gap-1.5 mb-4">
-              <label className="text-xs font-mono text-zinc-400">Regulation PDF Document</label>
-              
-              {!pdfFile ? (
-                <div
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                    dragActive
-                      ? "border-blue-500 bg-blue-950/20"
-                      : "border-zinc-800 bg-zinc-900/20 hover:border-zinc-700 hover:bg-zinc-900/40"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="application/pdf"
-                    className="hidden"
-                  />
-                  <Upload className="w-8 h-8 text-zinc-550 mx-auto mb-2 animate-bounce" />
-                  <p className="text-xs text-zinc-300 font-sans font-medium">
-                    Drag & drop your official RBI/SEBI PDF here, or <span className="text-blue-400 underline">browse</span>
-                  </p>
-                  <p className="text-[10px] text-zinc-550 font-mono mt-1">
-                    Accepts official file formats up to 10MB
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="bg-red-950/40 p-2.5 rounded-lg border border-red-900/30 text-red-400 flex-shrink-0">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-sans font-semibold text-zinc-200 truncate">{pdfName}</p>
-                      <p className="text-[10px] font-mono text-zinc-500">{pdfSize} • Ready to analyze</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={removePdf}
-                    className="p-1 text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-zinc-800/50 transition-colors"
-                    title="Remove PDF"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5 mb-4">
-              <label className="text-xs font-mono text-zinc-400">Legislation / Circular Content (Legal Language)</label>
-              <textarea
-                required={ingestMethod === "text"}
-                rows={4}
-                value={text}
-                onChange={(textE) => setText(textE.target.value)}
-                placeholder="Paste actual legal policy text. E.g. 'Banks must immediately coordinate localized data storage with physical boundary filters, enforcing adaptive permission groups inside the root user IAM environment.'"
-                className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-100 placeholder-zinc-650 focus:outline-none focus:border-blue-500 font-sans"
-              />
-            </div>
-          )}
+          <div className="flex flex-col gap-1.5 mb-4">
+            <label className="text-xs font-mono text-zinc-400">Legislation / Circular Circular Content (Legal Language)</label>
+            <textarea
+              required
+              rows={4}
+              value={text}
+              onChange={(textE) => setText(textE.target.value)}
+              placeholder="Paste actual legal policy text. E.g. 'Banks must immediately coordinate localized data storage with physical boundary filters, enforcing adaptive permission groups inside the root user IAM environment.'"
+              className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-100 placeholder-zinc-650 focus:outline-none focus:border-blue-500 font-sans"
+            />
+          </div>
 
           <div className="flex gap-2 justify-end">
             <button
@@ -622,64 +204,147 @@ export default function LiveFeed({
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-705 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer"
               id="submit-ingest-btn"
             >
-              {ingestMethod === "pdf" ? "Parse & Map PDF via Gemini" : "Analyze Directive via Gemini AI"}
+              Analyze Directive via Gemini AI
             </button>
           </div>
         </form>
       )}
 
-      {/* Main Panel - Clean, full-width database index list */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 px-0.5">
-          <span className="uppercase tracking-widest font-bold">Circular Database Index</span>
-          <span className="px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-zinc-400 font-mono text-[9px]">{filteredRegs.length} loaded</span>
-        </div>
-        <div className="relative">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search circular database..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-sm text-zinc-100 placeholder-zinc-650 focus:outline-none focus:border-blue-500/60 transition-colors"
-          />
+      {/* Main Panel Grid layout splits regulatory list and visual semantic inspector */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Regulation Navigation sidebar */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search circular database..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-sm text-zinc-100 placeholder-zinc-650 focus:outline-none focus:border-blue-500/60"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 max-h-[380px] overflow-y-auto pr-1">
+            {filteredRegs.map((reg) => {
+              const isActive = selectedReg?.id === reg.id || selectedReg?.title === reg.title; // simple safety check or just let it map
+              return (
+                <div
+                  key={reg.id}
+                  onClick={() => onSelectReg(reg)}
+                  className={`border p-3.5 rounded-xl cursor-pointer transition-all flex flex-col gap-1.5 ${selectedReg?.id === reg.id ? "bg-zinc-950 border-blue-500/80 shadow-lg shadow-blue-950/20" : "bg-zinc-950/50 border-zinc-800/80 hover:border-zinc-700"}`}
+                  id={`reg-card-${reg.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] font-mono">
+                    <span className="text-zinc-500">{reg.date}</span>
+                    <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${getSeverityColor(reg.severity)}`}>
+                      {reg.authority} | {reg.severity}
+                    </span>
+                  </div>
+                  <h4 className={`text-sm font-semibold ${selectedReg?.id === reg.id ? "text-blue-400" : "text-white hover:text-blue-400"} transition-colors`}>
+                    {reg.title}
+                  </h4>
+                  <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                    {reg.text}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-1">
-          {filteredRegs.map((reg) => {
-            const isActive = selectedReg?.id === reg.id || selectedReg?.title === reg.title;
-            const borderLeftColor = 
-              reg.severity === "CRITICAL" ? "border-l-rose-500" :
-              reg.severity === "HIGH" ? "border-l-amber-500" :
-              "border-l-blue-400";
-            
-            return (
-              <div
-                key={reg.id}
-                onClick={() => onSelectReg(reg)}
-                className={`border-t border-b border-r bg-[#09090c]/45 p-3.5 rounded-xl cursor-pointer transition-all flex flex-col gap-1.5 border-l-4 ${borderLeftColor} ${
-                  isActive 
-                    ? "bg-gradient-to-r from-zinc-950/90 to-[#0A0A0C] border-blue-500/80 shadow-md shadow-blue-950/15" 
-                    : "border-zinc-900/90 hover:border-zinc-800 hover:bg-zinc-900/10"
-                }`}
-                id={`reg-card-${reg.id}`}
-              >
-                <div className="flex items-center justify-between gap-2 flex-wrap text-[9px] font-mono leading-none">
-                  <span className="text-zinc-500">{reg.date}</span>
-                  <span className="text-blue-400 uppercase font-semibold">{reg.authority}</span>
+        {/* Semantic Interpretation Inspector (Slide 6 visual layout replacement) */}
+        <div className="lg:col-span-7 bg-zinc-950/90 border border-zinc-800 rounded-2xl p-5 flex flex-col justify-between min-h-[420px]">
+          {selectedReg ? (
+            <div className="flex flex-col h-full justify-between" id="semantic-inspector">
+              <div>
+                {/* Meta details */}
+                <div className="flex items-center justify-between text-xs font-mono border-b border-zinc-900 pb-3 mb-4 flex-wrap gap-2">
+                  <span className="text-zinc-500">AUTHORITY: <span className="text-white">{selectedReg.authority}</span></span>
+                  <span className="text-zinc-500">DATE INDEXED: <span className="text-white">{selectedReg.date}</span></span>
+                  <span className="text-zinc-500">CATEGORY: <span className="text-blue-400">{selectedReg.parsed.category}</span></span>
                 </div>
-                <h4 className={`text-xs font-semibold leading-relaxed font-sans ${isActive ? "text-blue-400 font-bold" : "text-zinc-100 hover:text-blue-300"} transition-colors line-clamp-2`}>
-                  {reg.title}
+
+                {/* Subtitle Circular representation */}
+                <h4 className="text-base font-semibold text-white tracking-tight">
+                  {selectedReg.title}
                 </h4>
-                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 border-t border-zinc-950/40 pt-1.5 mt-0.5">
-                  <span>{reg.parsed?.category || reg.category}</span>
-                  <span className={`text-[9px] font-sans hover:underline ${isActive ? "text-blue-400" : "text-zinc-650"}`}>
-                    Inspect →
-                  </span>
+
+                <div className="bg-zinc-905 p-3 rounded-xl border border-zinc-808 my-3 text-xs italic text-zinc-350 leading-relaxed">
+                  <span className="not-italic font-mono text-[10px] uppercase font-bold text-zinc-550 block mb-1">Raw Regulatory Text:</span>
+                  "{selectedReg.text}"
+                </div>
+
+                {/* Semantic legal interpretation engine block (Slide 6 'AI Extracts') */}
+                <div className="my-4">
+                  <div className="flex items-center gap-2 text-blue-400 text-xs font-mono uppercase font-bold mb-2">
+                    <Sparkles className="w-4 h-4 text-blue-400" />
+                    Autonomous Semantic Interpretation
+                  </div>
+                  
+                  {/* Extracted underlying Legal Intent */}
+                  <div className="bg-blue-950/15 border border-blue-800/20 rounded-xl p-3 text-xs leading-relaxed text-zinc-300">
+                    <span className="font-mono text-[10px] uppercase font-bold text-blue-400 block mb-1">Deciphered Policy Intent:</span>
+                    {selectedReg.parsed.legalIntent}
+                  </div>
+
+                  {/* Core Obligations Checklist */}
+                  <div className="mt-4 flex flex-col gap-1.5">
+                    <span className="font-mono text-[10px] uppercase font-bold text-zinc-500">Extracted Core System Obligations:</span>
+                    {selectedReg.parsed.extractedObligations.map((obl, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs text-zinc-300">
+                        <span className="text-blue-400 font-bold font-mono mt-0.5">✓</span>
+                        <span>{obl}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* MAP Action Points (Dashboard output preview) */}
+                <div className="mt-4 pt-4 border-t border-zinc-900">
+                  <span className="font-mono text-[10px] uppercase font-bold text-zinc-500 block mb-2">Automated MAP Action Points Generated:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {selectedReg.parsed.actionPoints.map((ap, idx) => (
+                      <div key={idx} className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 flex flex-col gap-1 shadow-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-blue-400 text-[10px] uppercase">{ap.department}</span>
+                          <span className="text-zinc-500 font-mono text-[9px]">{ap.jiraTicket}</span>
+                        </div>
+                        <p className="text-zinc-300 text-[11px] leading-snug">{ap.actionRequired}</p>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500 mt-1">
+                          <span>Owner: {ap.owner}</span>
+                          <span>Timeline: {ap.timelineDays} days</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Simulated / Fallback Flag */}
+              {selectedReg.fallbackMode ? (
+                <div className="mt-4 bg-blue-950/40 border border-blue-900/30 text-[10px] font-mono text-blue-400 px-3 py-2 rounded-xl flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Gemini API is currently experiencing a peak traffic spike. Activated local SentinelX Heuristic Analysis Engine gracefully.</span>
+                </div>
+              ) : selectedReg.simulated && (
+                <div className="mt-4 bg-amber-950/20 border border-amber-900/30 text-[10px] font-mono text-amber-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  No API key defined. Simulating advanced heuristic analysis model. Set GEMINI_API_KEY for sandbox.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center p-8 h-full" id="semantic-inspector-empty">
+              <Compass className="w-14 h-14 text-zinc-800 animate-pulse mb-3" />
+              <div>
+                <h4 className="font-semibold text-white">Select a Circular to Scan</h4>
+                <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+                  Click on any RBI circular, SEBI notification, or custom draft in the sidebar to review autonomous legal translation parameters.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -10,8 +10,7 @@ dotenv.config();
 // SentinelX utilizes process.cwd() dynamically to map and serve static production assets.
 
 const app = express();
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ limit: "100mb", extended: true }));
+app.use(express.json());
 
 const PORT = 3000;
 
@@ -164,363 +163,15 @@ app.get("/api/systems-state", (req, res) => {
   });
 });
 
-// API: Fetch Live Regulations Scraper (Fulfills Change #3 requirement)
-app.get("/api/fetch-live-regulations", async (req, res) => {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
-
-    const response = await fetch("https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx", {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
-      },
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const html = await response.text();
-    
-    const regex = /<a[^>]*class="tableanchor"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<td[^>]*class="tabledate"[^>]*>([\s\S]*?)<\/td>/gi;
-    const matches: { title: string; date: string }[] = [];
-    let match;
-    
-    while ((match = regex.exec(html)) !== null && matches.length < 3) {
-      const title = match[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-      const date = match[2].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-      if (title && date) {
-        matches.push({ title, date });
-      }
-    }
-
-    if (matches.length < 3) {
-      const altRegex = /<a[^>]*href=["'][^"']*PR[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
-      let altMatch;
-      while ((altMatch = altRegex.exec(html)) !== null && matches.length < 3) {
-        const title = altMatch[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-        if (title && title.length > 20 && !matches.some(m => m.title === title)) {
-          matches.push({
-            title,
-            date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-          });
-        }
-      }
-    }
-
-    if (matches.length === 0) {
-      throw new Error("No matches parsed from page");
-    }
-
-    const regulations = matches.map((m, idx) => {
-      let category = "Cybersecurity";
-      let severity = "HIGH";
-      const titleLower = m.title.toLowerCase();
-
-      if (titleLower.includes("privacy") || titleLower.includes("data") || titleLower.includes("personal") || titleLower.includes("consent")) {
-        category = "Data Privacy";
-        severity = "CRITICAL";
-      } else if (titleLower.includes("fraud") || titleLower.includes("aml") || titleLower.includes("money") || titleLower.includes("laundering")) {
-        category = "Fraud Prevention";
-        severity = "HIGH";
-      } else if (titleLower.includes("treasury") || titleLower.includes("liquidity") || titleLower.includes("forex") || titleLower.includes("exchange")) {
-        category = "Treasury";
-        severity = "MEDIUM";
-      }
-
-      let formattedDate = m.date;
-      try {
-        const parsedDate = new Date(m.date);
-        if (!isNaN(parsedDate.getTime())) {
-          formattedDate = parsedDate.toISOString().split("T")[0];
-        }
-      } catch (e) {
-        // use raw
-      }
-
-      return {
-        id: `rbi-live-${idx}-${Date.now()}`,
-        title: m.title,
-        authority: "RBI",
-        date: formattedDate,
-        severity: severity,
-        category: category,
-        text: `Live RBI Circular scraped in real-time from official source: "${m.title}". Issued relative to ${m.date}. SentinelX automatically monitors and traces this policy profile for compliance drift protection.`,
-        isLiveScraped: true,
-        parsed: {
-          category: category,
-          severity: severity,
-          legalIntent: `Ensure all enterprise systems conform to real-time criteria published in: "${m.title}".`,
-          extractedObligations: [
-            `Audit active security boundaries matching the directive: ${m.title.substring(0, 50)}...`,
-            `Update detection thresholds in real time across the production matrix.`,
-            `Perform continuous automated audit trails scanning localized ledgers.`
-          ],
-          actionPoints: [
-            { department: "Compliance", actionRequired: `Analyze structural criteria of circular: ${m.title}`, jiraTicket: `CMP-LIVE-${1000 + idx}`, owner: "Priya M.", timelineDays: 7, status: "PENDING" },
-            { department: "Cybersecurity", actionRequired: "Conduct system boundary checks for compliance with new live circular rules", jiraTicket: `SEC-LIVE-${2000 + idx}`, owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" }
-          ],
-          twinImpact: [
-            { systemName: "Authentication API", reason: "Direct gateway matching dynamic live rules", riskIncreasePercent: 20 },
-            { systemName: "Audit Logging Service", reason: "Continuous live audit trails verification required", riskIncreasePercent: 15 }
-          ],
-          driftVulnerabilities: [
-            { controlName: "Dynamic Policy Controls", driftPattern: "Access rule configurations mismatching live press guidelines", detectionSIEMQuery: "SELECT timestamp, user, action FROM system_audit WHERE level='CRITICAL'" }
-          ],
-          predictiveRiskIncrease: 12 + idx * 5,
-          remediationDurationWeeks: 2
-        }
-      };
-    });
-
-    res.json({ source: "RBI_LIVE_GATEWAY", regulations });
-
-  } catch (err: any) {
-    console.log("RBI Scrape: Gateway offline or redirected. Employing safe localized scraper fallback.");
-    
-    const currentDate = new Date();
-    const d1 = new Date(currentDate.getTime() - 12 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const d2 = new Date(currentDate.getTime() - 36 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const d3 = new Date(currentDate.getTime() - 72 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-    const mockLiveScraped = [
-      {
-        id: `rbi-mock-scraped-01-${Date.now()}`,
-        title: "RBI Guidelines on Digital Payment Infrastructure Security Controls",
-        authority: "RBI",
-        date: d1,
-        severity: "HIGH",
-        category: "Cybersecurity",
-        text: "This regulatory instruction mandates instant verification tracking, digital transaction bounds, and localized credential encryption layers across API endpoints.",
-        isLiveScraped: true,
-        parsed: {
-          category: "Cybersecurity",
-          severity: "HIGH",
-          legalIntent: "Establish hardened controls for digital payment channels.",
-          extractedObligations: [
-            "Validate endpoint cryptographic signatures",
-            "Introduce risk-graded velocity boundaries",
-            "Maintain append-only localized session logs"
-          ],
-          actionPoints: [
-            { department: "Cybersecurity", actionRequired: "Inject strict endpoint authentication parameters for new API boundaries", jiraTicket: "SEC-9080", owner: "Rohan V.", timelineDays: 10, status: "PENDING" },
-            { department: "Mobile Banking", actionRequired: "Integrate token validation context for client apps", jiraTicket: "MOB-8120", owner: "Ananya S.", timelineDays: 14, status: "IN_PROGRESS" }
-          ],
-          twinImpact: [
-            { systemName: "Authentication API", reason: "Direct processor of Payment Infrastructure Security parameters", riskIncreasePercent: 22 },
-            { systemName: "Mobile Banking App", reason: "Responsible for displaying hardened UI components", riskIncreasePercent: 12 }
-          ],
-          driftVulnerabilities: [
-            { controlName: "Cryptographic Consent SLAs", driftPattern: "Dev key templates bypass normal compliance verification under testing", detectionSIEMQuery: "SELECT timestamp, action FROM security_logs WHERE key_type='TEST'" }
-          ],
-          predictiveRiskIncrease: 18,
-          remediationDurationWeeks: 2
-        }
-      },
-      {
-        id: `rbi-mock-scraped-02-${Date.now()}`,
-        title: "Sovereign AI Governance and Model Drift Constraints in FinTech Applications",
-        authority: "RBI",
-        date: d2,
-        severity: "CRITICAL",
-        category: "Data Privacy",
-        text: "Directs FinTech operators to implement continuous system drift monitoring, secure neural translation verification, and model exception reporting.",
-        isLiveScraped: true,
-        parsed: {
-          category: "Data Privacy",
-          severity: "CRITICAL",
-          legalIntent: "Enforce rigorous controls on neural mapping and algorithmic models inside risk assessment frameworks.",
-          extractedObligations: [
-            "Enforce daily drift telemetry scans",
-            "Implement automated ledger risk indicators",
-            "Establish multi-region consent validation models"
-          ],
-          actionPoints: [
-            { department: "Compliance", actionRequired: "Establish daily audit checks on regulatory AI translation mappings", jiraTicket: "CMP-4550", owner: "Priya M.", timelineDays: 7, status: "PENDING" },
-            { department: "Fraud Team", actionRequired: "Configure model exception alerts for transaction limit overrides", jiraTicket: "FRD-2035", owner: "Vikram K.", timelineDays: 10, status: "IN_PROGRESS" }
-          ],
-          twinImpact: [
-            { systemName: "IAM System", reason: "AI drift impacts identity classifications and exemptions", riskIncreasePercent: 35 },
-            { systemName: "Fraud Detection", reason: "Requires direct updates to anomaly matching filters", riskIncreasePercent: 28 }
-          ],
-          driftVulnerabilities: [
-            { controlName: "Model exceptions", driftPattern: "Temporary exception list grows unmonitored during peaks", detectionSIEMQuery: "grep -rI 'override' /cloud/logging" }
-          ],
-          predictiveRiskIncrease: 32,
-          remediationDurationWeeks: 3
-        }
-      },
-      {
-        id: `rbi-mock-scraped-03-${Date.now()}`,
-        title: "Master Direction on Liquidity Coverage Ratio and Reserve Asset Allocations",
-        authority: "RBI",
-        date: d3,
-        severity: "MEDIUM",
-        category: "Treasury",
-        text: "Mandating strict compliance reporting intervals, liquidity risk vectors, and portfolio auditing guidelines to withstand high-velocity cash withdraw patterns.",
-        isLiveScraped: true,
-        parsed: {
-          category: "Treasury",
-          severity: "MEDIUM",
-          legalIntent: "Ensure liquid assets align dynamically with extreme stress test ratios.",
-          extractedObligations: [
-            "Define localized stress metrics boundaries",
-            "Verify real-time liquidity vector indices",
-            "Deliver instant compliance reporting packets"
-          ],
-          actionPoints: [
-            { department: "Treasury", actionRequired: "Align reserve asset weights with newly mandated liquidity factors", jiraTicket: "TRS-1090", owner: "Vikram K.", timelineDays: 14, status: "PENDING" },
-            { department: "Compliance", actionRequired: "Formulate report submission schedule for SEBI archive review", jiraTicket: "CMP-9102", owner: "Priya M.", timelineDays: 10, status: "IN_PROGRESS" }
-          ],
-          twinImpact: [
-            { systemName: "Audit Logging Service", reason: "Must store auditable reports for SEBI archiving review", riskIncreasePercent: 12 }
-          ],
-          driftVulnerabilities: [
-            { controlName: "Compliance Thresholds", driftPattern: "Liquidity limits calculated relative to stale asset values", detectionSIEMQuery: "SELECT timestamp, asset, weight FROM portfolio_limits" }
-          ],
-          predictiveRiskIncrease: 10,
-          remediationDurationWeeks: 2
-        }
-      }
-    ];
-
-    res.json({ source: "RBI_MOCK_FALLBACK", regulations: mockLiveScraped });
-  }
-});
-
-// Helper function to build dynamic, detailed, category-specific simulated responses
-function getDynamicFallbackParsed(category: string, severity: string, text: string, pdfName?: string, authority?: string) {
-  const finalAuth = authority || "SEBI/RBI Custom Input";
-  const uniqueVal = Math.floor(1000 + Math.random() * 9000);
-  
-  if (category === "Cybersecurity") {
-    return {
-      category: category,
-      severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-      legalIntent: pdfName 
-        ? `Ensure core identity systems and application endpoints conform to cybersecurity criteria in PDF: "${pdfName}".`
-        : `Enforce stringent cyber boundary defenses, implement adaptive authentication sequences, and audit zero-trust IAM policies regarding: "${text.substring(0, 75)}..."`,
-      extractedObligations: [
-        "Implement adaptive multi-factor authentication (MFA) across high-risk digital transaction endpoints.",
-        "Initiate comprehensive vulnerability and zero-trust connection boundary sweeps on active port channels.",
-        "Isolate and encrypt privileged administration session configurations on localized databases."
-      ],
-      actionPoints: [
-        { department: "Cybersecurity", actionRequired: "Configure adaptive security keys and stateful end-user device verification limits", jiraTicket: `SEC-CYBER-${uniqueVal}-1`, owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" as const },
-        { department: "Mobile Banking", actionRequired: "Integrate device context and cryptographic token verification into client apps", jiraTicket: `MOB-CYBER-${uniqueVal}-2`, owner: "Ananya S.", timelineDays: 30, status: "IN_PROGRESS" as const },
-        { department: "Fraud Team", actionRequired: "Audit real-time transactional credential scoring profiles and access limits", jiraTicket: `FRD-CYBER-${uniqueVal}-3`, owner: "Vikram K.", timelineDays: 15, status: "PENDING" as const }
-      ],
-      twinImpact: [
-        { systemName: "Authentication API", reason: "Direct recipient of upgraded session and token control guidelines", riskIncreasePercent: 24 },
-        { systemName: "IAM System", reason: "Required to trace temporary bypass permissions and group alignments", riskIncreasePercent: 18 }
-      ],
-      driftVulnerabilities: [
-        { controlName: "MFA Enforcement Override", driftPattern: "Temporary exemption status of security keys exceeding 48 active hours", detectionSIEMQuery: "SELECT user_id, event FROM secure_logs WHERE action='mfa_bypass_override' AND duration > 48" }
-      ],
-      predictiveRiskIncrease: 22,
-      remediationDurationWeeks: 3
-    };
-  } else if (category === "Data Privacy") {
-    return {
-      category: category,
-      severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-      legalIntent: pdfName 
-        ? `Uphold digital data sovereignty and regional storage audit compliance in booklet PDF: "${pdfName}".`
-        : `Uphold digital sovereignty by strictly maintaining local data custody protocols and explicit consent logs regarding: "${text.substring(0, 75)}..."`,
-      extractedObligations: [
-        "Record and index explicit user consent preceding any sovereign transaction data parsing loop.",
-        "Execute localized schema isolation protocols for high-sensitivity customer transaction records.",
-        "Establish daily physical audits on consent registries to guarantee privacy preservation."
-      ],
-      actionPoints: [
-        { department: "Compliance", actionRequired: "Draft explicit digital privacy guidelines and processing consent policies", jiraTicket: `CMP-PRIV-${uniqueVal}-1`, owner: "Priya M.", timelineDays: 10, status: "IN_PROGRESS" as const },
-        { department: "Digital Ledger", actionRequired: "Deploy isolated database schemas for sovereign data resident records", jiraTicket: `REG-PRIV-${uniqueVal}-2`, owner: "Rohan V.", timelineDays: 21, status: "IN_PROGRESS" as const },
-        { department: "Fraud Team", actionRequired: "Configure automated exception audits over cross-border transfer lists", jiraTicket: `FRD-PRIV-${uniqueVal}-3`, owner: "Vikram K.", timelineDays: 12, status: "PENDING" as const }
-      ],
-      twinImpact: [
-        { systemName: "Mobile Banking App", reason: "Must store user consent records securely and partition tables", riskIncreasePercent: 28 },
-        { systemName: "Audit Logging Service", reason: "Maintains high-integrity localized ledger histories of consent events", riskIncreasePercent: 20 }
-      ],
-      driftVulnerabilities: [
-        { controlName: "Resident Ledger Sync", driftPattern: "Foreign indexing of sovereign user states prior to complete consent validation", detectionSIEMQuery: "SELECT record_id FROM transfer_queue WHERE consent_authorized=false AND destination_region!='INDIA'" }
-      ],
-      predictiveRiskIncrease: 26,
-      remediationDurationWeeks: 4
-    };
-  } else if (category === "Fraud Prevention") {
-    return {
-      category: category,
-      severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-      legalIntent: pdfName 
-        ? `Audit transactional anomalies and enforce anti-money laundering limits published in: "${pdfName}".`
-        : `Configure real-time transaction scoring boundaries and anomalous velocity tracking rules regarding: "${text.substring(0, 75)}..."`,
-      extractedObligations: [
-        "Track regulatory velocity limits and report automated outbound transactions to FIU registries.",
-        "Implement heuristic machine learning exception alerts for bulk transaction limit exceptions.",
-        "Block offshore systemic routing paths lacking explicit cryptographic validation headers."
-      ],
-      actionPoints: [
-        { department: "Fraud Team", actionRequired: "Update real-time transaction anomaly detection scoring configurations", jiraTicket: `FRD-FRUD-${uniqueVal}-1`, owner: "Vikram K.", timelineDays: 7, status: "IN_PROGRESS" as const },
-        { department: "Compliance", actionRequired: "Generate and deliver daily automated suspicious transaction activity reports", jiraTicket: `CMP-FRUD-${uniqueVal}-2`, owner: "Priya M.", timelineDays: 10, status: "IN_PROGRESS" as const },
-        { department: "Mobile Banking", actionRequired: "Apply API rate limiting boundaries for accounts displaying volatile activity", jiraTicket: `MOB-FRUD-${uniqueVal}-3`, owner: "Ananya S.", timelineDays: 15, status: "PENDING" as const }
-      ],
-      twinImpact: [
-        { systemName: "Fraud Detection", reason: "Coordinates limit parameters and anomaly scoring filters", riskIncreasePercent: 30 },
-        { systemName: "Authentication API", reason: "Isolate network hops conveying elevated offshore ledger packets", riskIncreasePercent: 15 }
-      ],
-      driftVulnerabilities: [
-        { controlName: "Manual Volume Override", driftPattern: "High-volume capital movements executing through custom administrative tokens", detectionSIEMQuery: "SELECT session_id, volume FROM manual_overrides WHERE volume_limit > 250000 AND approval_id IS NULL" }
-      ],
-      predictiveRiskIncrease: 19,
-      remediationDurationWeeks: 2
-    };
-  } else {
-    // General Compliance
-    return {
-      category: category,
-      severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-      legalIntent: pdfName 
-        ? `Align reporting schedules and corporate compliance structures to guidelines in PDF: "${pdfName}".`
-        : `Synchronize design-time dependency maps and submit completed regulatory filings regarding: "${text.substring(0, 75)}..."`,
-      extractedObligations: [
-        "Submit scheduled compliance documentation to regulatory supervisory bodies.",
-        "Maintain current operational dependency structures inside system twin networks.",
-        "Introduce active automated drift verification intervals for transaction logs."
-      ],
-      actionPoints: [
-        { department: "Compliance", actionRequired: "Develop board-ready alignment reports and regulatory stability updates", jiraTicket: `CMP-COMP-${uniqueVal}-1`, owner: "Priya M.", timelineDays: 7, status: "IN_PROGRESS" as const },
-        { department: "Cybersecurity", actionRequired: "Verify trace logging intervals and Digital Twin logical representation maps", jiraTicket: `SEC-COMP-${uniqueVal}-2`, owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" as const }
-      ],
-      twinImpact: [
-        { systemName: "Audit Logging Service", reason: "Translates and routes infrastructure state verification packages", riskIncreasePercent: 12 },
-        { systemName: "IAM System", reason: "Upholds structural group boundaries against staging creep", riskIncreasePercent: 10 }
-      ],
-      driftVulnerabilities: [
-        { controlName: "Operational Verification Scan", driftPattern: "Oversight of system configuration scans resulting in expired inventory profiles", detectionSIEMQuery: "SELECT cluster_id, last_scan FROM node_registry WHERE last_scan < NOW() - INTERVAL '30 days'" }
-      ],
-      predictiveRiskIncrease: 12,
-      remediationDurationWeeks: 2
-    };
-  }
-}
-
 // API: Analyze Custom Regulation (Uses Gemini AI)
 app.post("/api/analyze-regulation", async (req, res) => {
-  const { text, title, authority, pdfBase64, pdfName, ingestMethod } = req.body;
+  const { text, title, authority } = req.body;
 
-  if (ingestMethod === "text" && (!text || text.trim() === "")) {
+  if (!text || text.trim() === "") {
     return res.status(400).json({ error: "Regulation text is required" });
   }
 
-  if (ingestMethod === "pdf" && !pdfBase64) {
-    return res.status(400).json({ error: "PDF document payload is required" });
-  }
-
-  const userTitle = title || (pdfName ? pdfName.replace(/\.[^/.]+$/, "") : "Custom Parsed Circular");
+  const userTitle = title || "Custom Parsed Circular";
   const userAuthority = authority || "SEBI/RBI Custom Input";
 
   const ai = getGeminiClient();
@@ -532,44 +183,37 @@ app.post("/api/analyze-regulation", async (req, res) => {
     // Simple heuristic parser for simulated responses based on text signals
     let category = "Cybersecurity";
     let severity = "MEDIUM";
-    let fallbackTextSnippet = text || "";
-
-    if (pdfName) {
-      const nameLower = pdfName.toLowerCase();
-      fallbackTextSnippet = `Document content extracted from PDF circular "${pdfName}". `;
-      if (nameLower.includes("rbi") || nameLower.includes("reserve")) {
-        category = "Cybersecurity";
-        severity = "HIGH";
-        fallbackTextSnippet += `This Reserve Bank of India (RBI) bank-governance directive commands immediate compliance reviews of credential boundary mapping, token exceptions, and localized cryptographic storage logs.`;
-      } else if (nameLower.includes("dpdp") || nameLower.includes("privacy")) {
-        category = "Data Privacy";
-        severity = "CRITICAL";
-        fallbackTextSnippet += `This incoming SEBI / DPDP legal directive lays down concrete regulations requiring explicit consent ledgers and isolation bounds before transaction processing loops are parsed.`;
-      } else if (nameLower.includes("sebi") || nameLower.includes("stock") || nameLower.includes("portfolio")) {
-        category = "Compliance";
-        severity = "MEDIUM";
-        fallbackTextSnippet += `This incoming SEBI regulatory sweep orders continuous ledger audits, physical posture synchronization, and transaction tracking matrices inside our primary data warehouses.`;
-      } else if (nameLower.includes("fraud") || nameLower.includes("money") || nameLower.includes("laundering")) {
-        category = "Fraud Prevention";
-        severity = "HIGH";
-        fallbackTextSnippet += `This legislative directive targets anti-money laundering and real-time transaction anomalies, requiring a revision of digital scoring profiles and exception group reporting limits.`;
-      } else {
-        category = "Compliance";
-        severity = "MEDIUM";
-        fallbackTextSnippet += `This custom administrative guidance outlines dynamic enterprise-wide compliance reporting schedules and technical drift assessment intervals across our production containers.`;
-      }
-    } else {
-      const lowerText = text.toLowerCase();
-      if (lowerText.includes("privacy") || lowerText.includes("personal") || lowerText.includes("consent") || lowerText.includes("dpdp")) {
-        category = "Data Privacy";
-        severity = "CRITICAL";
-      } else if (lowerText.includes("fraud") || lowerText.includes("transaction") || lowerText.includes("money") || lowerText.includes("auth") || lowerText.includes("mfa") || lowerText.includes("token")) {
-        category = "Fraud Prevention";
-        severity = "HIGH";
-      }
+    if (text.toLowerCase().includes("privacy") || text.toLowerCase().includes("personal") || text.toLowerCase().includes("consent")) {
+      category = "Data Privacy";
+      severity = "CRITICAL";
+    } else if (text.toLowerCase().includes("fraud") || text.toLowerCase().includes("transaction") || text.toLowerCase().includes("money")) {
+      category = "Fraud Prevention";
+      severity = "HIGH";
     }
 
-    const mockParsed = getDynamicFallbackParsed(category, severity, fallbackTextSnippet, pdfName, userAuthority);
+    const mockParsed = {
+      category: category,
+      severity: severity,
+      legalIntent: `Ensure banks comply safely with real-time requirements regarding: "${text.substring(0, 50)}..."`,
+      extractedObligations: [
+        `Strict monitoring of systems matching input criteria.`,
+        `Formal audit report generated on governance state.`,
+        `Regular continuous posture assessments.`
+      ],
+      actionPoints: [
+        { department: "Compliance", actionRequired: "Perform deep impact evaluation of incoming circular requirements", jiraTicket: "CMP-9002", owner: "Priya M.", timelineDays: 7, status: "IN_PROGRESS" },
+        { department: "Cybersecurity", actionRequired: "Audit current IAM boundary configurations and exception groups", jiraTicket: "SEC-1120", owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" }
+      ],
+      twinImpact: [
+        { systemName: "IAM System", reason: "Credential authorization standards are impacted directly", riskIncreasePercent: 12 },
+        { systemName: "Audit Logging Service", reason: "Auditable verification reports require state aggregation", riskIncreasePercent: 20 }
+      ],
+      driftVulnerabilities: [
+        { controlName: "Compliance Thresholds", driftPattern: "Lack of routine SIEM logging review leading to silent exceptions", detectionSIEMQuery: "SELECT timestamp, user, action FROM system_audit WHERE level='CRITICAL'" }
+      ],
+      predictiveRiskIncrease: 15,
+      remediationDurationWeeks: 2
+    };
 
     const simulatedRegulation = {
       id: `reg-${Date.now()}`,
@@ -578,41 +222,24 @@ app.post("/api/analyze-regulation", async (req, res) => {
       date: new Date().toISOString().split("T")[0],
       severity: severity,
       category: category,
-      text: fallbackTextSnippet,
+      text: text,
       parsed: mockParsed,
-      simulated: true, // tells client it was offline evaluation
-      fallbackMode: true
+      simulated: true // tells client it was offline evaluation
     };
 
     return res.json(simulatedRegulation);
   }
 
   try {
-    const parts: any[] = [];
-    if (pdfBase64) {
-      const cleanBase64 = pdfBase64.includes(";base64,") 
-        ? pdfBase64.split(";base64,")[1] 
-        : pdfBase64;
-      
-      parts.push({
-        inlineData: {
-          mimeType: "application/pdf",
-          data: cleanBase64
-        }
-      });
-    }
+    const prompt = `
+      You are an expert Enterprise Compliance and Regulatory Intelligence AI Engine designed for tier-1 bank structures.
+      Analyze the following regulatory text or circular instructions:
 
-    let textPrompt = `You are an expert Enterprise Compliance and Regulatory Intelligence AI Engine designed for tier-1 bank structures.\n`;
-    if (pdfBase64) {
-      textPrompt += `Analyze the attached PDF regulation/circular titled "${userTitle}" issued by "${userAuthority}" (original file: "${pdfName || "uploaded.pdf"}").\n`;
-    } else {
-      textPrompt += `Analyze the following regulatory text or circular instructions:
       TITLE: "${userTitle}"
       AUTHORITY: "${userAuthority}"
-      CONTENT: "${text}"\n`;
-    }
+      CONTENT: "${text}"
 
-    textPrompt += `Identify:
+      Identify:
       1. Domain classification ("Cybersecurity", "Data Privacy", "Fraud Prevention", "Operations", "Treasury").
       2. Severity level ("CRITICAL", "HIGH", "MEDIUM", "LOW").
       3. Legal Intent: Interpret the core sovereign target of this legal policy into direct systems-facing logic.
@@ -636,11 +263,9 @@ app.post("/api/analyze-regulation", async (req, res) => {
       Ensure the JSON fits the structure perfectly. Return NOTHING but the JSON.
     `;
 
-    parts.push({ text: textPrompt });
-
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: { parts: parts },
+      contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -711,19 +336,13 @@ app.post("/api/analyze-regulation", async (req, res) => {
     });
 
     const parsedJson = JSON.parse(response.text || "{}");
-    // Append standard statuses and unique keys to action points
+    // Append standard statuses to action points
     if (parsedJson.actionPoints) {
-      const uniqueVal = Math.floor(1000 + Math.random() * 9000);
       parsedJson.actionPoints = parsedJson.actionPoints.map((ap: any, idx: number) => ({
         ...ap,
-        jiraTicket: ap.jiraTicket ? `${ap.jiraTicket}-SIM-${uniqueVal}-${idx}` : `AP-${uniqueVal}-${idx}`,
         status: idx % 2 === 0 ? "IN_PROGRESS" : "PENDING"
       }));
     }
-
-    const finalRegulationText = pdfBase64 
-      ? `PDF Source Ingested: "${pdfName}". Core legal intent identified by Gemini AI: ${parsedJson.legalIntent || "Continuous regulatory compliance alignment."}`
-      : text;
 
     const parsedRegulation = {
       id: `reg-${Date.now()}`,
@@ -732,56 +351,50 @@ app.post("/api/analyze-regulation", async (req, res) => {
       date: new Date().toISOString().split("T")[0],
       severity: parsedJson.severity || "MEDIUM",
       category: parsedJson.category || "Cybersecurity",
-      text: finalRegulationText,
+      text: text,
       parsed: parsedJson,
       simulated: false
     };
 
     res.json(parsedRegulation);
   } catch (error: any) {
-    console.log("Gemini Parser Status: Model busy or unavailable. Employing local structured heuristic analyzer.");
+    console.warn("Active Gemini API failed or returned 503. Executing high-fidelity heuristic fallback:", error);
     
     // Heuristic parser for simulated responses based on text signals
     let category = "Cybersecurity";
     let severity = "MEDIUM";
-    let fallbackTextSnippet = text || "";
-
-    if (pdfName) {
-      const nameLower = pdfName.toLowerCase();
-      fallbackTextSnippet = `Document content extracted from PDF circular "${pdfName}". `;
-      if (nameLower.includes("rbi") || nameLower.includes("reserve")) {
-        category = "Cybersecurity";
-        severity = "HIGH";
-        fallbackTextSnippet += `This Reserve Bank of India (RBI) bank-governance directive commands immediate compliance reviews of credential boundary mapping, token exceptions, and localized cryptographic storage logs.`;
-      } else if (nameLower.includes("dpdp") || nameLower.includes("privacy")) {
-        category = "Data Privacy";
-        severity = "CRITICAL";
-        fallbackTextSnippet += `This incoming SEBI / DPDP legal directive lays down concrete regulations requiring explicit consent ledgers and isolation bounds before transaction processing loops are parsed.`;
-      } else if (nameLower.includes("sebi") || nameLower.includes("stock") || nameLower.includes("portfolio")) {
-        category = "Compliance";
-        severity = "MEDIUM";
-        fallbackTextSnippet += `This incoming SEBI regulatory sweep orders continuous ledger audits, physical posture synchronization, and transaction tracking matrices inside our primary data warehouses.`;
-      } else if (nameLower.includes("fraud") || nameLower.includes("money") || nameLower.includes("laundering")) {
-        category = "Fraud Prevention";
-        severity = "HIGH";
-        fallbackTextSnippet += `This legislative directive targets anti-money laundering and real-time transaction anomalies, requiring a revision of digital scoring profiles and exception group reporting limits.`;
-      } else {
-        category = "Compliance";
-        severity = "MEDIUM";
-        fallbackTextSnippet += `This custom administrative guidance outlines dynamic enterprise-wide compliance reporting schedules and technical drift assessment intervals across our production containers.`;
-      }
-    } else {
-      const lowerText = text.toLowerCase();
-      if (lowerText.includes("privacy") || lowerText.includes("personal") || lowerText.includes("consent") || lowerText.includes("dpdp")) {
-        category = "Data Privacy";
-        severity = "CRITICAL";
-      } else if (lowerText.includes("fraud") || lowerText.includes("transaction") || lowerText.includes("money") || lowerText.includes("auth") || lowerText.includes("mfa") || lowerText.includes("token")) {
-        category = "Fraud Prevention";
-        severity = "HIGH";
-      }
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes("privacy") || lowerText.includes("personal") || lowerText.includes("consent") || lowerText.includes("dpdp")) {
+      category = "Data Privacy";
+      severity = "CRITICAL";
+    } else if (lowerText.includes("fraud") || lowerText.includes("transaction") || lowerText.includes("money") || lowerText.includes("auth") || lowerText.includes("mfa") || lowerText.includes("token")) {
+      category = "Fraud Prevention";
+      severity = "HIGH";
     }
 
-    const mockParsed = getDynamicFallbackParsed(category, severity, fallbackTextSnippet, pdfName, userAuthority);
+    const mockParsed = {
+      category: category,
+      severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+      legalIntent: `Ensure banking divisions properly align localized infrastructure configurations regarding: "${text.substring(0, 75)}..."`,
+      extractedObligations: [
+        `Strict monitoring of systems matching incoming authority constraints.`,
+        `Configure boundaries and exceptions to avoid structural policy drift.`,
+        `Conduct routine continuous posture updates inside our administrative controls.`
+      ],
+      actionPoints: [
+        { department: "Compliance", actionRequired: "Perform rapid evaluation of incoming circular requirements and map parameters", jiraTicket: "CMP-9201", owner: "Priya M.", timelineDays: 7, status: "IN_PROGRESS" as const },
+        { department: "Cybersecurity", actionRequired: "Validate IAM boundary filters, authentication session tokens, and exception list definitions", jiraTicket: "SEC-1422", owner: "Rohan V.", timelineDays: 14, status: "IN_PROGRESS" as const }
+      ],
+      twinImpact: [
+        { systemName: "IAM System", reason: "Exemptions matching the newly specified credentials are systematically cataloged", riskIncreasePercent: 15 },
+        { systemName: "Audit Logging Service", reason: "Logging and archive procedures must assert compliance indicators", riskIncreasePercent: 25 }
+      ],
+      driftVulnerabilities: [
+        { controlName: "Systemic Boundaries", driftPattern: "Temporary exemption profiles configured for staging or developer testing are left active", detectionSIEMQuery: "SELECT timestamp, user, action FROM system_audit WHERE level='CRITICAL'" }
+      ],
+      predictiveRiskIncrease: 18,
+      remediationDurationWeeks: 3
+    };
 
     const simulatedRegulation = {
       id: `reg-${Date.now()}`,
@@ -790,7 +403,7 @@ app.post("/api/analyze-regulation", async (req, res) => {
       date: new Date().toISOString().split("T")[0],
       severity: severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
       category: category,
-      text: fallbackTextSnippet,
+      text: text,
       parsed: mockParsed,
       simulated: true,
       fallbackMode: true // indicates it fell back due to API error/congestion
@@ -799,7 +412,6 @@ app.post("/api/analyze-regulation", async (req, res) => {
     res.json(simulatedRegulation);
   }
 });
-
 
 // API: Executive Summaries (Generates custom speech narrative from SentinelX memory)
 app.post("/api/executive-narrative", async (req, res) => {
@@ -854,7 +466,7 @@ app.post("/api/executive-narrative", async (req, res) => {
     res.json(parsed);
 
   } catch (e: any) {
-    console.log("Gemini Executive Narrative Status: Model busy. Employing local dynamic synthesis engine.");
+    console.warn("Active Gemini API narrative failed or returned 503. Executing high-fidelity heuristic template fallback:", e);
     res.json({
       brief: "Continuous alignment metrics register high critical drift patterns on centralized identity nodes.",
       paragraphs: [
