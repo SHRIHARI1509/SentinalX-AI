@@ -4,8 +4,22 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
+
+// Initialize Supabase Client if env keys exist
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = (supabaseUrl && supabaseKey && supabaseUrl !== "YOUR_SUPABASE_URL") 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;
+
+if (supabase) {
+  console.log("Supabase Integration Active: Data will be persisted in real-time.");
+} else {
+  console.log("Supabase Integration Offline: Falling back to in-memory state persistence.");
+}
 
 // SentinelX utilizes process.cwd() dynamically to map and serve static production assets.
 
@@ -156,12 +170,80 @@ const DEFAULT_SYSTEMS_STATE = {
   }
 };
 
-// API: Systems State
-app.get("/api/systems-state", (req, res) => {
+// Local in-memory fallback state copies
+let localRegulations = [...MOCK_REGULATIONS];
+let localSystemsState = { ...DEFAULT_SYSTEMS_STATE };
+
+async function loadStateFromDb() {
+  if (!supabase) {
+    return { regulations: localRegulations, systems: localSystemsState };
+  }
+  try {
+    const { data, error } = await supabase
+      .from("sentinelx_state")
+      .select("regulations, systems_state")
+      .eq("id", 1)
+      .single();
+      
+    if (error || !data) {
+      console.log("Supabase State Empty or Missing: Seeding default regulatory configuration.");
+      const { error: insertErr } = await supabase
+        .from("sentinelx_state")
+        .upsert({ id: 1, regulations: MOCK_REGULATIONS, systems_state: DEFAULT_SYSTEMS_STATE });
+      if (insertErr) {
+        console.error("Failed to seed default state in Supabase:", insertErr);
+      }
+      return { regulations: MOCK_REGULATIONS, systems: DEFAULT_SYSTEMS_STATE };
+    }
+    return { regulations: data.regulations, systems: data.systems_state };
+  } catch (e) {
+    console.error("Failed to fetch state from Supabase, falling back to memory:", e);
+    return { regulations: localRegulations, systems: localSystemsState };
+  }
+}
+
+async function saveStateToDb(regulationsList: any[], systemsState: any) {
+  localRegulations = regulationsList;
+  localSystemsState = systemsState;
+  
+  if (!supabase) return;
+  
+  try {
+    const { error } = await supabase
+      .from("sentinelx_state")
+      .upsert({ 
+        id: 1, 
+        regulations: regulationsList, 
+        systems_state: systemsState, 
+        updated_at: new Date().toISOString() 
+      });
+    if (error) {
+      console.error("Supabase State Upsert Error:", error);
+    }
+  } catch (e) {
+    console.error("Failed to write state to Supabase:", e);
+  }
+}
+
+// API: Systems State (GET)
+app.get("/api/systems-state", async (req, res) => {
+  const dbState = await loadStateFromDb();
   res.json({
-    systems: DEFAULT_SYSTEMS_STATE,
-    regulations: MOCK_REGULATIONS
+    systems: dbState.systems,
+    regulations: dbState.regulations
   });
+});
+
+// API: Systems State (POST to sync client modifications)
+app.post("/api/systems-state", async (req, res) => {
+  try {
+    const { systems, regulations } = req.body;
+    await saveStateToDb(regulations, systems);
+    res.json({ status: "success" });
+  } catch (error) {
+    console.error("Systems State Update Error:", error);
+    res.status(500).json({ error: "Failed to update systems state" });
+  }
 });
 
 // API: Fetch Live Regulations Scraper (Fulfills Change #3 requirement)
@@ -592,6 +674,10 @@ app.post("/api/analyze-regulation", async (req, res) => {
       fallbackMode: true
     };
 
+    const dbState = await loadStateFromDb();
+    const updatedRegulations = [simulatedRegulation, ...dbState.regulations];
+    await saveStateToDb(updatedRegulations, dbState.systems);
+
     return res.json(simulatedRegulation);
   }
 
@@ -755,6 +841,10 @@ app.post("/api/analyze-regulation", async (req, res) => {
       parsed: parsedJson,
       simulated: false
     };
+
+    const dbState = await loadStateFromDb();
+    const updatedRegulations = [parsedRegulation, ...dbState.regulations];
+    await saveStateToDb(updatedRegulations, dbState.systems);
 
     res.json(parsedRegulation);
   } catch (error: any) {
