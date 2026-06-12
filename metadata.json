@@ -1,0 +1,6 @@
+{
+  "name": "SentinelX AI",
+  "description": "Autonomous Predictive Governance & Regulatory Intelligence Fabric",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
