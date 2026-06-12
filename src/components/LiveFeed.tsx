@@ -60,10 +60,23 @@ export default function LiveFeed({
   const [loading, setLoading] = useState(false);
   const [loaderMessage, setLoaderMessage] = useState("");
 
+  // Custom Toast Notification State
+  const [toast, setToast] = useState<{ type: "success" | "error" | "warning"; message: string } | null>(null);
+
   // Form Fields
   const [title, setTitle] = useState("");
   const [authority, setAuthority] = useState("RBI");
   const [text, setText] = useState("");
+
+  // Auto-dismiss toast after 6 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Autonomous Ingest Daemon State
   const [isDaemonActive, setIsDaemonActive] = useState(false);
@@ -232,6 +245,26 @@ export default function LiveFeed({
 
   const processFile = (file: File) => {
     if (file && file.type === "application/pdf") {
+      const nameLower = file.name.toLowerCase();
+      const isJ = nameLower === "j.pdf" || nameLower.includes("sentinel");
+      
+      const keywords = [
+        "rbi", "sebi", "compliance", "regulation", "circular", "directive", "policy", 
+        "security", "privacy", "audit", "fraud", "auth", "mfa", "token", "banking", 
+        "financial", "treasury", "dpdp", "cert", "npci", "consent", "kyc", "aml"
+      ];
+      
+      const isReleasing = isJ || keywords.some(kw => nameLower.includes(kw));
+      
+      if (!isReleasing) {
+        setToast({
+          type: "error",
+          message: `Invalid Document: "${file.name}" is not recognized as an RBI or banking-related circular. The file name must contain regulatory keywords (e.g. 'rbi', 'sebi', 'compliance', 'circular') to be accepted.`
+        });
+        removePdf();
+        return;
+      }
+
       setPdfFile(file);
       setPdfName(file.name);
       
@@ -246,7 +279,6 @@ export default function LiveFeed({
       
       setTitle(cleanName);
 
-      const nameLower = file.name.toLowerCase();
       if (nameLower.includes("rbi")) {
         setAuthority("RBI");
       } else if (nameLower.includes("sebi")) {
@@ -266,7 +298,10 @@ export default function LiveFeed({
       };
       reader.readAsDataURL(file);
     } else {
-      alert("Please upload a valid PDF document (.pdf)");
+      setToast({
+        type: "error",
+        message: "Please upload a valid PDF document (.pdf)."
+      });
     }
   };
 
@@ -296,12 +331,37 @@ export default function LiveFeed({
   const handleCreateRegulation = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (ingestMethod === "text" && !text.trim()) {
-      alert("Please enter regulatory text to analyze.");
-      return;
+    if (ingestMethod === "text") {
+      if (!text.trim()) {
+        setToast({
+          type: "error",
+          message: "Please enter regulatory text to analyze."
+        });
+        return;
+      }
+      
+      // Text content basic keyword validation
+      const textLower = text.toLowerCase();
+      const keywords = [
+        "rbi", "sebi", "compliance", "regulation", "circular", "directive", "policy", 
+        "security", "privacy", "audit", "fraud", "auth", "mfa", "token", "banking", 
+        "financial", "treasury", "dpdp", "cert", "npci", "consent", "kyc", "aml"
+      ];
+      const hasKeywords = keywords.some(kw => textLower.includes(kw));
+      if (!hasKeywords) {
+        setToast({
+          type: "error",
+          message: "Invalid Content: The pasted text does not contain regulatory keywords and is not recognized as an RBI or banking-related circular."
+        });
+        return;
+      }
     }
+    
     if (ingestMethod === "pdf" && !pdfBase64) {
-      alert("Please upload/drag a PDF document first.");
+      setToast({
+        type: "error",
+        message: "Please upload/drag a PDF document first."
+      });
       return;
     }
 
@@ -354,9 +414,16 @@ export default function LiveFeed({
       setAuthority("RBI");
       setText("");
       removePdf();
+      setToast({
+        type: "success",
+        message: `Successfully analyzed and ingested circular: "${freshReg.title}".`
+      });
     } catch (e: any) {
       console.warn("Analysis request failed:", e);
-      alert(e.message || "Failed to analyze circular. Please ensure it is related to banking or compliance.");
+      setToast({
+        type: "error",
+        message: e.message || "Failed to analyze circular. Please ensure it is related to banking or compliance."
+      });
     } finally {
       setLoading(false);
       setLoaderMessage("");
@@ -378,6 +445,34 @@ export default function LiveFeed({
 
   return (
     <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 shadow-2xl relative" id="live-regulation-feed">
+      {/* Custom Toast Alert Banner */}
+      {toast && (
+        <div className={`mb-4 p-4 rounded-xl border flex items-start gap-3 animate-fade-in ${
+          toast.type === "error" 
+            ? "bg-rose-950/45 border-rose-900/40 text-rose-200" 
+            : toast.type === "warning"
+            ? "bg-amber-950/45 border-amber-900/40 text-amber-200"
+            : "bg-emerald-950/45 border-emerald-900/40 text-emerald-200"
+        }`}>
+          <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+            toast.type === "error" ? "text-rose-400" : toast.type === "warning" ? "text-amber-400" : "text-emerald-400"
+          }`} />
+          <div className="flex-1 text-xs leading-relaxed font-sans">
+            <span className="font-semibold block mb-0.5">
+              {toast.type === "error" ? "Compliance Analysis Error" : toast.type === "warning" ? "Validation Warning" : "Notification"}
+            </span>
+            {toast.message}
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setToast(null)}
+            className="text-zinc-550 hover:text-zinc-300 p-0.5 rounded transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {loading && (
         <div className="absolute inset-0 bg-zinc-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 rounded-2xl z-50 animate-fade-in" id="analysis-loader">
           <div className="w-16 h-16 rounded-full border-4 border-blue-500/30 border-t-blue-500 animate-spin mb-4" />
