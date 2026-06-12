@@ -20,6 +20,8 @@ export interface DriftVulnerability {
 }
 
 export interface ParsedRegulation {
+  isValidRegulation?: boolean;
+  rejectionReason?: string;
   category: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   legalIntent: string;

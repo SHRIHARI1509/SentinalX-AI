@@ -49,7 +49,59 @@ import {
 } from "lucide-react";
 
 export default function App() {
-  const [state, setState] = useState<WarRoomState | null>(null);
+  const [state, setState] = useState<WarRoomState>({
+    overallRiskScore: 34,
+    statusSummary: "MODERATE RISK - Active Drift Alert Detected across 2 nodes",
+    activeDrifts: [
+      {
+        id: "drift-01",
+        system: "IAM System",
+        control: "MFA Enforcement Policy",
+        expected: "100% Group-wide MFA enabled",
+        actual: "92% (8 VIP records exempted temporarily by Dev Support)",
+        severity: "HIGH",
+        detectedAt: "2026-06-11T01:14:00Z",
+        driftDays: 4,
+        remedyAction: "Enforce fallback SMS authentication and revoke temporary exemptions via Azure IAM API"
+      },
+      {
+        id: "drift-02",
+        system: "Audit Logging Service",
+        control: "SEBI Compliance Archive SLA",
+        expected: "Logs uploaded < 5m delay",
+        actual: "Log delivery latency currently high (~45m delay)",
+        severity: "MEDIUM",
+        detectedAt: "2026-06-11T02:00:00Z",
+        driftDays: 1,
+        remedyAction: "Trigger auto-scale on logging ingestion worker containers"
+      }
+    ],
+    digitalTwin: {
+      nodes: [
+        { id: "Mobile Banking App", status: "WARNING", type: "CLIENT", owner: "Mobile Banking Team" },
+        { id: "Authentication API", status: "HEALTHY", type: "API", owner: "Cybersecurity" },
+        { id: "IAM System", status: "CRITICAL", type: "INFRA", owner: "Identity & Core Security" },
+        { id: "Fraud Detection", status: "WARNING", type: "SERVICE", owner: "Fraud Detection Team" },
+        { id: "Audit Logging Service", status: "WARNING", type: "LOG", owner: "Audit & Compliance Group" }
+      ],
+      links: [
+        { source: "Mobile Banking App", target: "Authentication API" },
+        { source: "Authentication API", target: "IAM System" },
+        { source: "IAM System", target: "Fraud Detection" },
+        { source: "Fraud Detection", target: "Audit Logging Service" }
+      ]
+    },
+    predictiveInsights: {
+      failureProbability: 81,
+      nextAuditTimelineDays: 45,
+      riskFactors: [
+        "Unresolved MFA policy drift in the IAM infrastructure layer",
+        "Overdue DPDP consent action items assigned to the Compliance division",
+        "Log syncing delays observed on mobile-ledger transaction pathways"
+      ],
+      historicalVelocity: "72% Treasury delay likelihood based on standard 8-cycle governance metrics"
+    }
+  });
   const [regulations, setRegulations] = useState<RegulationObject[]>([]);
   const [selectedReg, setSelectedReg] = useState<RegulationObject | null>(null);
   const [allActionPoints, setAllActionPoints] = useState<ActionPoint[]>([]);
@@ -586,17 +638,22 @@ export default function App() {
         const response = await fetch("/api/systems-state");
         const data = await response.json();
         
-        setState(data.systems);
-        setRegulations(data.regulations);
+        // Guard against null/undefined from DB before mounting state
+        if (data.systems && data.systems.activeDrifts) {
+          setState(data.systems);
+        }
+        
+        const regs = Array.isArray(data.regulations) ? data.regulations : [];
+        setRegulations(regs);
         
         // Pick the first circular to show initially
-        if (data.regulations.length > 0) {
-          setSelectedReg(data.regulations[0]);
+        if (regs.length > 0) {
+          setSelectedReg(regs[0]);
         }
 
         // Aggregate action points from pre-loaded circular entries
         const aggregated: ActionPoint[] = [];
-        data.regulations.forEach((reg: RegulationObject) => {
+        regs.forEach((reg: RegulationObject) => {
           if (reg.parsed?.actionPoints) {
             aggregated.push(...reg.parsed.actionPoints);
           }
