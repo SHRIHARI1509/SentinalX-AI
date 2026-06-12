@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 // @ts-ignore
-import { PDFParse } from "pdf-parse";
+import pdf from "pdf-parse";
 
 dotenv.config();
 
@@ -508,8 +508,7 @@ async function extractTextFromPdfBase64(pdfBase64: string): Promise<string> {
       ? pdfBase64.split(";base64,")[1] 
       : pdfBase64;
     const buffer = Buffer.from(cleanBase64, "base64");
-    const parser = new PDFParse({ data: buffer });
-    const data = await parser.getText();
+    const data = await pdf(buffer);
     return data.text || "";
   } catch (error) {
     console.warn("Could not parse PDF using pdf-parse, returning empty string:", error);
