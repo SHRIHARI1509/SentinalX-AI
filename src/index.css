@@ -53,3 +53,45 @@
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(51, 65, 85, 0.9);
 }
+
+/* High-Impact Digital Twin Compliance Wave Animations (Fulfills Change #2) */
+@keyframes pulseGlowRed {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(244, 63, 94, 0.2);
+    border-color: rgba(244, 63, 94, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 32px rgba(244, 63, 94, 0.75);
+    border-color: rgba(244, 63, 94, 1);
+  }
+}
+
+@keyframes pulseGlowOrange {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(245, 158, 11, 0.7);
+    border-color: rgba(245, 158, 11, 1);
+  }
+}
+
+@keyframes dashMove {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.animate-pulse-red {
+  animation: pulseGlowRed 1.2s ease-in-out infinite;
+}
+
+.animate-pulse-orange {
+  animation: pulseGlowOrange 1.5s ease-in-out infinite;
+}
+
+.animate-dash-move {
+  stroke-dasharray: 8, 4;
+  animation: dashMove 0.8s linear infinite;
+}
